@@ -16,7 +16,12 @@ console = Console(file=__import__("sys").stderr)
 
 DAVINCI_RESOLVE_API = os.getenv("DAVINCI_RESOLVE_API", "http://127.0.0.1:10843")
 REAPER_API = os.getenv("REAPER_API", "http://127.0.0.1:10797")
-RESOLUME_API = os.getenv("RESOLUME_MCP_API", "http://127.0.0.1:0")  # MCP stdio - use OSC directly
+from ..resolume_client import (
+    ResolumeOscSender,
+    resolume_sync_from_deck_state,
+    resolume_trigger_effect,
+    resolume_visuals_from_deck_state,
+)
 
 
 def register_daw_tools(mcp: FastMCP):
@@ -52,7 +57,7 @@ def register_daw_tools(mcp: FastMCP):
         - export_session: Write a session metadata JSON for DAW import
         - send_to_fairlight: Send stems to DaVinci Resolve's Fairlight page via REST API
         - send_to_reaper: Send stems to Reaper via reaper-mcp REST API (POST /api/v1/project/import_media)
-        - resolume_sync: Send deck BPM and play state to Resolume via OSC (port 7000)
+        - resolume_sync: Send deck BPM to Resolume via OSC (canonical composition addresses, port 7000)
         - visuals_connect: Start continuous audio-reactive visual sync to Resolume
         - visuals_trigger: Fire a one-shot visual effect (strobe, pulse, color_cycle, wave, particles)
 
@@ -184,25 +189,21 @@ def register_daw_tools(mcp: FastMCP):
                 }
 
             elif operation == "resolume_sync":
-                """Send deck BPM and beat state to Resolume via OSC."""
                 br = get_bridge()
                 d = deck_a
-                bpm = br.get_state("bpm", d, 128.0)
-                playing = br.get_state("play", d, 0.0)
-                volume = br.get_state("volume", d, 0.8)
-
                 try:
-                    from pythonosc import udp_client
-
-                    client = udp_client.SimpleUDPClient("127.0.0.1", 7000)
-                    client.send_message("/composition/tempo", float(bpm))
-                    client.send_message("/composition/bpm", float(bpm))
-                    client.send_message(f"/deck/{d}/playing", 1.0 if playing else 0.0)
-                    client.send_message(f"/deck/{d}/volume", float(volume))
+                    sender = ResolumeOscSender()
+                    data = resolume_sync_from_deck_state(
+                        sender,
+                        bpm=br.get_state("bpm", d, 128.0),
+                        deck=d,
+                        playing=br.get_state("play", d, 0.0),
+                        volume=br.get_state("volume", d, 0.8),
+                    )
                     return {
                         "success": True,
-                        "message": f"Sent BPM {bpm} to Resolume on port 7000",
-                        "data": {"bpm": bpm, "playing": bool(playing), "deck": d},
+                        "message": f"Sent BPM {data['bpm']} to Resolume ({sender.host}:{sender.port})",
+                        "data": data,
                     }
                 except ImportError:
                     return {"success": False, "message": "python-osc not installed", "data": {}}
@@ -210,48 +211,24 @@ def register_daw_tools(mcp: FastMCP):
                     return {"success": False, "message": f"Resolume OSC error: {e}", "data": {}}
 
             elif operation == "visuals_connect":
-                """Start continuous audio-reactive visual sync to Resolume."""
                 try:
-                    from pythonosc import udp_client
-
-                    client = udp_client.SimpleUDPClient("127.0.0.1", 7000)
-
                     bridge = get_bridge()
-
-                    bpm = bridge.get_state("bpm", deck_a, 128.0)
-                    samples = bridge.get_state("track_samples", deck_a, 0.0)
-                    sample_rate = bridge.get_state("track_samplerate", deck_a, 44100.0)
-                    volume = bridge.get_state("volume", deck_a, 0.8)
-                    pregain = bridge.get_state("pregain", deck_a, 1.0)
-
-                    # Beat phase computation
-                    beats_per_second = bpm / 60.0
-                    seconds = samples / sample_rate if sample_rate > 0 else 0
-                    total_beats = seconds * beats_per_second
-                    beat_phase = total_beats % 1.0
-                    energy = min(1.0, volume * pregain * 1.5)
-                    beat_flash = 1.0 if beat_phase < 0.05 else max(0.0, 1.0 - (beat_phase * 2))
-
-                    # Send to Resolume
-                    client.send_message("/composition/tempo", float(bpm))
-                    client.send_message("/composition/bpm", float(bpm))
-                    client.send_message("/layer1/opacity", float(energy))
-                    client.send_message("/layer1/effect1/param1", float(bpm / 200.0))
-                    client.send_message("/layer1/effect1/param2", float(beat_phase))
-                    client.send_message("/layer1/effect1/param3", float(energy))
-                    client.send_message("/layer2/opacity", float(beat_flash))
-                    client.send_message("/layer2/effect1/param1", float(beat_phase))
-
+                    sender = ResolumeOscSender()
+                    data = resolume_visuals_from_deck_state(
+                        sender,
+                        bpm=bridge.get_state("bpm", deck_a, 128.0),
+                        track_samples=bridge.get_state("track_samples", deck_a, 0.0),
+                        sample_rate=bridge.get_state("track_samplerate", deck_a, 44100.0),
+                        volume=bridge.get_state("volume", deck_a, 0.8),
+                        pregain=bridge.get_state("pregain", deck_a, 1.0),
+                    )
+                    data["mode"] = mode
                     return {
                         "success": True,
-                        "message": f"Audio-reactive visuals connected (BPM: {bpm}, energy: {energy:.2f}, mode: {mode})",
-                        "data": {
-                            "bpm": bpm,
-                            "beat_phase": beat_phase,
-                            "energy": energy,
-                            "beat_flash": beat_flash,
-                            "mode": mode,
-                        },
+                        "message": (
+                            f"Audio-reactive visuals (BPM: {data['bpm']}, energy: {data['energy']:.2f}, mode: {mode})"
+                        ),
+                        "data": data,
                     }
                 except ImportError:
                     return {"success": False, "message": "python-osc not installed", "data": {}}
@@ -259,36 +236,20 @@ def register_daw_tools(mcp: FastMCP):
                     return {"success": False, "message": f"Visuals error: {e}", "data": {}}
 
             elif operation == "visuals_trigger":
-                """Fire a one-shot visual effect."""
                 effects = {"strobe", "pulse", "color_cycle", "wave", "particles"}
                 if effect not in effects:
                     return {"success": False, "message": f"Unknown effect: {effect}. Options: {effects}", "data": {}}
 
                 try:
-                    from pythonosc import udp_client
-
-                    client = udp_client.SimpleUDPClient("127.0.0.1", 7000)
-
-                    intensity = max(0.0, min(1.0, intensity))
-
-                    if effect == "strobe":
-                        client.send_message("/layer2/opacity", intensity)
-                        client.send_message("/layer2/effect1/param1", 0.0)
-                    elif effect == "pulse":
-                        client.send_message("/layer1/scale", 1.0 + intensity * 0.15)
-                        client.send_message("/layer1/opacity", 1.0)
-                    elif effect == "color_cycle":
-                        client.send_message("/layer1/effect1/param3", 1.0)
-                    elif effect == "wave":
-                        client.send_message("/layer1/effect2/param1", intensity)
-                    elif effect == "particles":
-                        client.send_message("/layer3/opacity", 1.0)
-
+                    sender = ResolumeOscSender()
+                    resolume_trigger_effect(sender, effect, intensity)
                     return {
                         "success": True,
                         "message": f"Triggered visual effect: {effect} at {intensity:.2f}",
                         "data": {"effect": effect, "intensity": intensity},
                     }
+                except ValueError:
+                    return {"success": False, "message": f"Unknown effect: {effect}", "data": {}}
                 except ImportError:
                     return {"success": False, "message": "python-osc not installed", "data": {}}
                 except Exception as e:

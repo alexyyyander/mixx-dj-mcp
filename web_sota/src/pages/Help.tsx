@@ -311,8 +311,10 @@ export default function Help() {
               <a href="https://resolume.com/download/" className={linkClass} target="_blank" rel="noreferrer">
                 unlimited demo
               </a>{" "}
-              (watermark on output). Enough to develop resolume-mcp, test NDI input, and run{" "}
-              <code>mixx_daw(resolume_sync)</code> BPM OSC on port 7000.
+              (logo watermark on output plus a robotic voice that says “Resolume Avenue” every so
+              often — fine for dev, not for club PA if Resolume carries audio). A license removes
+              both. Enough to test NDI input and{" "}
+              <code>mixx_daw(resolume_sync)</code> OSC on port 7000.
             </p>
             <h3 className="text-base font-medium text-slate-200">Integration pieces</h3>
             <ul className="list-disc pl-5 space-y-1 text-slate-400">

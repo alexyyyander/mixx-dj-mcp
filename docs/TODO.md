@@ -44,7 +44,7 @@ Plan: [mixxxxx `docs/RESOLUME-FLEET-CROSSCONNECT.md`](https://github.com/sandras
 
 | # | Item |
 |---|------|
-| 8 | R1: Fix `mixx_daw` Resolume OSC; delegate to resolume-mcp :11176 |
+| 8 | R1: `resolume_client.py` + resolume-mcp port 7000 fix (done); verify on Resolume |
 | 9 | R2: Cockpit “Resolume follow deck” sync loop |
 | 10 | Share OSC address constants with resolume-mcp / osc-mcp skill |
 
