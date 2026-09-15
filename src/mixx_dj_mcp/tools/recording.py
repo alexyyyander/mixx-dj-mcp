@@ -1,5 +1,6 @@
 """Live set recording, replay, and export."""
 
+import asyncio
 import json
 import time
 from datetime import datetime
@@ -140,7 +141,7 @@ async def mixx_recording(
                 addr = evt.get("address", "")
                 val = evt.get("value", 0.0)
                 bridge.send(addr, val)
-                time.sleep((evt.get("beat_offset", 0) or 0) / replay_speed)
+                await asyncio.sleep((evt.get("beat_offset", 0) or 0) / replay_speed)
             return {
                 "success": True,
                 "message": f"Replayed {len(events)} events from {set_id}",
