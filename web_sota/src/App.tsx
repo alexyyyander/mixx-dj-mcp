@@ -10,6 +10,7 @@ import Chat from "./pages/Chat";
 import Settings from "./pages/Settings";
 import Cockpit from "./pages/Cockpit";
 import Help from "./pages/Help";
+import AiDj from "./pages/AiDj";
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
         <Route path="/library" element={<Library />} />
         <Route path="/effects" element={<Effects />} />
         <Route path="/cockpit" element={<Cockpit />} />
+        <Route path="/ai-dj" element={<AiDj />} />
         <Route path="/tools" element={<Tools />} />
         <Route path="/skins" element={<Skins />} />
         <Route path="/chat" element={<Chat />} />

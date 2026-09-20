@@ -38,6 +38,7 @@ const routeTitles: Record<string, string> = {
   "/chat": "Chat",
   "/tools": "Tools",
   "/cockpit": "Cockpit",
+  "/ai-dj": "AI DJ Control Room",
   "/skins": "Skins",
   "/help": "Help",
   "/settings": "Settings",

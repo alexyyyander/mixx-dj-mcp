@@ -358,6 +358,156 @@ export function fetchNowPlaying(): Promise<NowPlayingResponse> {
   return apiGet<NowPlayingResponse>("/api/v1/cockpit/now_playing");
 }
 
+export interface AiDjProfileSummary {
+  track_id: string;
+  source_path: string;
+  duration_seconds: number;
+  bpm: number | null;
+  key_camelot: string | null;
+  vocal_probability: number | null;
+  segments: number;
+  beats: number;
+  stems: string[];
+  top_tags: string[];
+}
+
+export interface AiDjMarker {
+  time_seconds: number;
+  role: string;
+  label: string;
+  confidence: number;
+  source: string;
+  color: string;
+  beat_index?: number | null;
+  slot?: number | null;
+}
+
+export interface AiDjMarkerMap {
+  schema_version: string;
+  track_id: string;
+  duration_seconds: number;
+  bpm: number | null;
+  key_camelot: string | null;
+  semantic_tags: string[];
+  markers: AiDjMarker[];
+  hotcues: AiDjMarker[];
+}
+
+export interface AiDjTransitionPlan {
+  plan_id: string;
+  from_track_id: string;
+  to_track_id: string;
+  mix_out_time_seconds: number;
+  mix_in_time_seconds: number;
+  duration_beats: number;
+  target_bpm: number;
+  style: string;
+  score: number;
+  score_breakdown: Record<string, number>;
+  rationale: string[];
+}
+
+export interface AiDjBridgePayload {
+  path: string;
+  value?: number;
+  action?: string;
+}
+
+export interface AiDjStatusResponse {
+  available: boolean;
+  root: string;
+  profiles_dir: string;
+  profile_count: number;
+  bridge_url: string;
+  live_control_enabled: boolean;
+  execution_clock: string;
+  bridge: { reachable: boolean; connected: boolean; error?: string; status?: Record<string, unknown> };
+}
+
+export interface AiDjPlanResponse {
+  success: boolean;
+  plan: AiDjTransitionPlan;
+  rehearsal: {
+    plan_id: string;
+    deck_out: number;
+    deck_in: number;
+    target_bpm: number;
+    duration_beats: number;
+    scheduled: boolean;
+    clock: string;
+    requests: Array<{
+      relative_beat: number;
+      endpoint: string;
+      payload: AiDjBridgePayload;
+      scheduled: boolean;
+    }>;
+  };
+}
+
+export interface AiDjJob {
+  job_id: string;
+  kind: "analysis" | "transition";
+  status: string;
+  current_beat?: number;
+  duration_beats?: number;
+  completed_requests?: number;
+  request_count?: number;
+  error?: string;
+  track_id?: string;
+  profile_path?: string;
+  audio_path?: string;
+}
+
+export function fetchAiDjStatus(): Promise<AiDjStatusResponse> {
+  return apiGet<AiDjStatusResponse>("/api/ai-dj/status");
+}
+
+export function fetchAiDjProfiles(): Promise<{ profiles: AiDjProfileSummary[] }> {
+  return apiGet<{ profiles: AiDjProfileSummary[] }>("/api/ai-dj/profiles");
+}
+
+export function fetchAiDjMarkers(trackId: string, deck = 1): Promise<{ profile: string; deck: number; marker_map: AiDjMarkerMap }> {
+  return apiGet(`/api/ai-dj/profiles/${encodeURIComponent(trackId)}/markers?deck=${deck}`);
+}
+
+export function createAiDjPlan(body: {
+  from_track_id: string;
+  to_track_id: string;
+  duration_beats: number;
+  deck_out: number;
+  deck_in: number;
+}): Promise<AiDjPlanResponse> {
+  return apiPost<AiDjPlanResponse>("/api/ai-dj/plan", body);
+}
+
+export function analyzeAiDj(body: { audio_path: string; device: "cpu" | "cuda" | "mps" }): Promise<{ success: boolean; job: AiDjJob }> {
+  return apiPost("/api/ai-dj/analyze", body);
+}
+
+export function executeAiDj(body: {
+  from_track_id: string;
+  to_track_id: string;
+  duration_beats: number;
+  deck_out: number;
+  deck_in: number;
+  confirm: boolean;
+  wait_ms: number;
+}): Promise<{ success: boolean; requires_confirmation?: boolean; message: string; job?: AiDjJob; plan?: AiDjTransitionPlan; rehearsal?: AiDjPlanResponse["rehearsal"] }> {
+  return apiPost("/api/ai-dj/execute", body);
+}
+
+export function applyAiDjMarkers(body: { track_id: string; deck: number; confirm: boolean; wait_ms: number }): Promise<Record<string, unknown>> {
+  return apiPost("/api/ai-dj/markers/apply", body);
+}
+
+export function fetchAiDjJob(jobId: string): Promise<AiDjJob> {
+  return apiGet<AiDjJob>(`/api/ai-dj/jobs/${encodeURIComponent(jobId)}`);
+}
+
+export function cancelAiDjJob(jobId: string): Promise<Record<string, unknown>> {
+  return apiPost(`/api/ai-dj/jobs/${encodeURIComponent(jobId)}/cancel`);
+}
+
 export function fetchFleetSources(): Promise<{ sources: Record<string, unknown> }> {
   return apiGet<{ sources: Record<string, unknown> }>("/api/v1/fleet/sources");
 }

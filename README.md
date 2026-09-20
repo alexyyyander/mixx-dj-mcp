@@ -34,6 +34,7 @@
   <a href="docs/NDI-TARGETS.md">NDI Targets</a> ·
   <a href="docs/NOOB_GUIDE.md">Beginner Guide</a> ·
   <a href="docs/AI_TRANSITIONS.md">AI Transitions</a>
+  · <a href="docs/AI_DJ_CONTROL_ROOM.md">AI DJ Control Room</a>
   </sub>
 </div>
 
@@ -96,6 +97,7 @@ Your AI assistant (Claude, Cursor, opencode) can now control your decks.
 | **NDI** (network video from mixxxxx) | [`docs/NDI.md`](docs/NDI.md) · [`docs/NDI-TARGETS.md`](docs/NDI-TARGETS.md) · webapp **Help → NDI** |
 | **Project status & backlog** | [`docs/STATUS.md`](docs/STATUS.md) · [`docs/TODO.md`](docs/TODO.md) |
 | **AI-powered transitions** between decks | [`docs/AI_TRANSITIONS.md`](docs/AI_TRANSITIONS.md) |
+| **Visual AI DJ control room** (analysis, tags, plans, guarded execution) | [`docs/AI_DJ_CONTROL_ROOM.md`](docs/AI_DJ_CONTROL_ROOM.md) · webapp **AI DJ** |
 | **Architecture** — how the OSC bridge, REST API, and webapp work | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
 | **Beginner's guide** to DJing with Mixxx | [`docs/NOOB_GUIDE.md`](docs/NOOB_GUIDE.md) |
 | **Comparing** Mixxx to other DJ software | [`docs/DJ_LANDSCAPE.md`](docs/DJ_LANDSCAPE.md) |

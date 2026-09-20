@@ -7,12 +7,14 @@ from pathlib import Path
 
 import httpx
 import uvicorn
+from fastapi import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastmcp import FastMCP
 from pydantic import BaseModel
 from rich.console import Console
 
+from .ai_dj_runtime import AiDjRuntime, AiDjRuntimeError
 from .bridge.osc_bridge import OscBridge
 from .config import MixxConfig
 from .http_app import create_app, mount_mcp
@@ -83,6 +85,31 @@ class EffectsRequest(BaseModel):
     enable: bool = True
 
 
+class AiDjPlanRequest(BaseModel):
+    from_track_id: str
+    to_track_id: str
+    duration_beats: int = 32
+    deck_out: int = 1
+    deck_in: int = 2
+
+
+class AiDjExecuteRequest(AiDjPlanRequest):
+    confirm: bool = False
+    wait_ms: int = 1000
+
+
+class AiDjMarkersRequest(BaseModel):
+    track_id: str
+    deck: int = 1
+    confirm: bool = False
+    wait_ms: int = 1000
+
+
+class AiDjAnalyzeRequest(BaseModel):
+    audio_path: str
+    device: str = "cpu"
+
+
 console = Console(file=sys.stderr)
 
 current_dir = Path(__file__).parent
@@ -90,6 +117,7 @@ if str(current_dir) not in sys.path:
     sys.path.insert(0, str(current_dir))
 
 config = MixxConfig.from_env()
+ai_dj_runtime = AiDjRuntime.from_env()
 mcp = FastMCP(config.mcp_name)
 
 _start_time = time.time()
@@ -167,6 +195,128 @@ async def health_check():
         "providers": {"mixxx_osc": osc_live},
         "mixxx_process_running": proc.running,
     }
+
+
+@fastapi_app.get("/api/ai-dj/status")
+async def ai_dj_status():
+    result = ai_dj_runtime.repository_status()
+    result["bridge"] = await ai_dj_runtime.bridge_health()
+    return result
+
+
+@fastapi_app.get("/api/ai-dj/profiles")
+async def ai_dj_profiles():
+    return {"profiles": ai_dj_runtime.list_profiles()}
+
+
+@fastapi_app.get("/api/ai-dj/profiles/{track_id}")
+async def ai_dj_profile(track_id: str):
+    try:
+        return ai_dj_runtime.profile_document(track_id)
+    except AiDjRuntimeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@fastapi_app.get("/api/ai-dj/profiles/{track_id}/markers")
+async def ai_dj_markers(track_id: str, deck: int = 1):
+    try:
+        document = ai_dj_runtime.marker_document(track_id, deck=deck)
+        return {"profile": track_id, "deck": deck, "marker_map": document}
+    except AiDjRuntimeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@fastapi_app.post("/api/ai-dj/analyze")
+async def ai_dj_analyze(req: AiDjAnalyzeRequest):
+    try:
+        return await ai_dj_runtime.start_analysis(req.audio_path, device=req.device)
+    except AiDjRuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@fastapi_app.post("/api/ai-dj/plan")
+async def ai_dj_plan(req: AiDjPlanRequest):
+    try:
+        plan = ai_dj_runtime.transition_plan(
+            req.from_track_id,
+            req.to_track_id,
+            duration_beats=req.duration_beats,
+        )
+        rehearsal = ai_dj_runtime.transition_rehearsal(
+            plan,
+            deck_out=req.deck_out,
+            deck_in=req.deck_in,
+        )
+        return {"success": True, "plan": plan, "rehearsal": rehearsal}
+    except (AiDjRuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@fastapi_app.post("/api/ai-dj/rehearse")
+async def ai_dj_rehearse(req: AiDjPlanRequest):
+    try:
+        plan = ai_dj_runtime.transition_plan(
+            req.from_track_id,
+            req.to_track_id,
+            duration_beats=req.duration_beats,
+        )
+        rehearsal = ai_dj_runtime.transition_rehearsal(
+            plan,
+            deck_out=req.deck_out,
+            deck_in=req.deck_in,
+        )
+        return {"success": True, "plan": plan, "rehearsal": rehearsal}
+    except (AiDjRuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@fastapi_app.post("/api/ai-dj/execute")
+async def ai_dj_execute(req: AiDjExecuteRequest):
+    try:
+        plan = ai_dj_runtime.transition_plan(
+            req.from_track_id,
+            req.to_track_id,
+            duration_beats=req.duration_beats,
+        )
+        result = await ai_dj_runtime.start_transition(
+            plan,
+            deck_out=req.deck_out,
+            deck_in=req.deck_in,
+            confirmed=req.confirm,
+            wait_ms=req.wait_ms,
+        )
+        return {**result, "plan": plan}
+    except (AiDjRuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=409 if req.confirm else 400, detail=str(exc)) from exc
+
+
+@fastapi_app.post("/api/ai-dj/markers/apply")
+async def ai_dj_apply_markers(req: AiDjMarkersRequest):
+    try:
+        return await ai_dj_runtime.apply_markers(
+            req.track_id,
+            deck=req.deck,
+            confirmed=req.confirm,
+            wait_ms=req.wait_ms,
+        )
+    except AiDjRuntimeError as exc:
+        raise HTTPException(status_code=409 if req.confirm else 400, detail=str(exc)) from exc
+
+
+@fastapi_app.get("/api/ai-dj/jobs/{job_id}")
+async def ai_dj_job(job_id: str):
+    try:
+        return ai_dj_runtime.job(job_id)
+    except AiDjRuntimeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@fastapi_app.post("/api/ai-dj/jobs/{job_id}/cancel")
+async def ai_dj_cancel_job(job_id: str):
+    try:
+        return ai_dj_runtime.cancel_job(job_id)
+    except AiDjRuntimeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @fastapi_app.get("/api/v1/diagnostics")
