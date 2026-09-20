@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import os
 import sys
 import time
@@ -201,11 +202,48 @@ class AiDjRuntime:
         if deck_out not in range(1, 5) or deck_in not in range(1, 5) or deck_out == deck_in:
             raise AiDjRuntimeError("deck_out and deck_in must be different decks between 1 and 4")
         requests = []
+        previous_beat = -math.inf
         for operation in plan.get("operations") or []:
+            if not isinstance(operation, dict):
+                raise AiDjRuntimeError("transition operations must be objects")
+            relative_beat = operation.get("relative_beat")
+            if isinstance(relative_beat, bool) or not isinstance(relative_beat, (int, float)):
+                raise AiDjRuntimeError("transition relative_beat must be numeric")
+            relative_beat = float(relative_beat)
+            if not math.isfinite(relative_beat) or relative_beat < 0:
+                raise AiDjRuntimeError("transition relative_beat must be finite and non-negative")
+            if relative_beat < previous_beat:
+                raise AiDjRuntimeError("transition operations must be ordered by relative_beat")
+            previous_beat = relative_beat
+            kind = operation.get("kind")
+            if kind not in {"control", "action"}:
+                raise AiDjRuntimeError("transition operation kind must be control or action")
+            path = str(operation.get("path", ""))
+            path_parts = path.split("/")
+            if (
+                not path
+                or path.startswith("/")
+                or any(part in {"", ".", ".."} for part in path_parts)
+                or not path.startswith(("decks/1/", "decks/2/", "mixer/"))
+            ):
+                raise AiDjRuntimeError(
+                    "transition paths must be relative deck 1/2 or mixer controls without traversal"
+                )
+            value = operation.get("value")
+            if value is not None and (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(float(value))
+                or not 0 <= float(value) <= 1
+            ):
+                raise AiDjRuntimeError("transition control values must be finite numbers from 0 to 1")
+            action = operation.get("action")
+            if kind == "action" and (action is None or not isinstance(action, str) or not action.strip()):
+                raise AiDjRuntimeError("action operations require a non-empty action")
             endpoint = "/api/control" if operation.get("kind") == "control" else "/api/action"
             payload: dict[str, Any] = {
                 "path": self._remap_path(
-                    str(operation.get("path", "")),
+                    path,
                     deck_out=deck_out,
                     deck_in=deck_in,
                 )
@@ -216,7 +254,7 @@ class AiDjRuntime:
                 payload["action"] = operation["action"]
             requests.append(
                 {
-                    "relative_beat": float(operation.get("relative_beat", 0)),
+                    "relative_beat": relative_beat,
                     "endpoint": endpoint,
                     "payload": payload,
                     "scheduled": False,

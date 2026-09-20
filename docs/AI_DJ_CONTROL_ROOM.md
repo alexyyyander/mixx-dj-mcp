@@ -64,3 +64,9 @@ bridge does not provide sample-accurate scheduling, so the live worker uses a
 backend monotonic clock and waits for each relative beat. For club-safe,
 sample-accurate automation, the next step is a Mixxx mapping/scheduler that
 consumes this same plan inside Mixxx.
+
+Before rehearsal or execution, the runtime rejects negative, non-finite, or
+out-of-order beat offsets; path traversal; unknown control namespaces; and
+control values outside `0..1`. Transition plans may address only the two
+source deck paths (`decks/1/*`, `decks/2/*`) and `mixer/*`, which are remapped
+to the selected physical decks only after validation.

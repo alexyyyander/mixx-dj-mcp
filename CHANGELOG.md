@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Reliability
+- Make the Mixxx process probe tolerant of macOS privacy restrictions and hardened CI runners.
+- Treat UDP port `0` as a valid ephemeral-port probe during OSC onboarding.
+- Reject malformed or out-of-order AI DJ transition operations before they reach the bridge.
+
+### AI DJ engineering
+- The guarded AI DJ control room is now documented with a separate analysis/engineering roadmap in the companion `mixxx-ai-dj` repository.
+
 ## 0.2.1 (2026-07-26)
 
 ### Webapp

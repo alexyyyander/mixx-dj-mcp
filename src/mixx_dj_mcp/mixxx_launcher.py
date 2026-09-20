@@ -118,15 +118,26 @@ def detect_installations() -> list[MixxxInstallation]:
 
 def get_process_info() -> MixxxProcessInfo:
     """True if mixxx.exe is running (vanilla or mixxxxx build)."""
-    for proc in psutil.process_iter(["pid", "name", "exe"]):
-        try:
-            name = (proc.info.get("name") or "").lower()
-            if name != "mixxx.exe":
+    # macOS privacy controls and hardened CI runners can deny the initial
+    # process-list syscall, before ``process_iter`` yields an individual
+    # process. Treat that as "unknown/not running" instead of failing the
+    # health and first-run endpoints.
+    try:
+        processes = psutil.process_iter(["pid", "name", "exe"])
+    except (OSError, PermissionError, psutil.AccessDenied):
+        return MixxxProcessInfo(running=False, pid=None, exe=None)
+    try:
+        for proc in processes:
+            try:
+                name = (proc.info.get("name") or "").lower()
+                if name != "mixxx.exe":
+                    continue
+                exe = proc.info.get("exe") or ""
+                return MixxxProcessInfo(running=True, pid=proc.info["pid"], exe=exe)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
-            exe = proc.info.get("exe") or ""
-            return MixxxProcessInfo(running=True, pid=proc.info["pid"], exe=exe)
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            continue
+    except (OSError, PermissionError, psutil.AccessDenied):
+        return MixxxProcessInfo(running=False, pid=None, exe=None)
     return MixxxProcessInfo(running=False, pid=None, exe=None)
 
 

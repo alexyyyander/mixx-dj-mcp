@@ -7,6 +7,10 @@ import socket
 
 def udp_port_available(host: str, port: int) -> bool:
     """True if we can bind UDP port (nothing else listening)."""
+    # Port 0 asks the OS for an ephemeral port; there is no fixed port to
+    # clash with, so it is always a valid availability probe.
+    if port == 0:
+        return True
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
